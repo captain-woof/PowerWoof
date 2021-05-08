@@ -2,7 +2,7 @@
 
 ### Introduction
 
-This repo is a store-house for some Powershell and C++ POCs, concepts and examples that I keep on studying and writing about, to aid pentesters in their work. I will keep adding new stuff as I keep learning new concepts and improving upon them.
+This repo is a store-house for some C#, Powershell and C++ POCs, concepts and examples that I keep on studying and writing about, to aid pentesters in their work. I will keep adding new stuff as I keep learning new concepts and improving upon them.
 
 Feel free to use and adapt them to your scenario.
 
