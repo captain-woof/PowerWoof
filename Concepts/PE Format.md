@@ -266,7 +266,15 @@
 
                 // The bottom 12 bits of each TypeOffset element are a relocation offset, and need to be added to the value of the Virtual Address field from this relocation block's header and Image base address to get the address where the relocation has to be done. The high 4 bits of each WORD are a relocation type. (3 is for IMAGE_REL_BASED_HIGHLOW, commonly used)
             ```
-    
+            
+| Relocation Type | Relocation Value | Description |
+|---|---|---|
+| IMAGE_REL_BASED_ABSOLUTE | 0 | The base relocation is skipped. This type can be used to pad a block. |
+| IMAGE_REL_BASED_HIGH | 1 | The base relocation adds the high 16 bits of the difference to the 16-bit field at offset. The 16-bit field represents the high value of a 32-bit word. |
+| IMAGE_REL_BASED_LOW | 2 | The base relocation adds the low 16 bits of the difference to the 16-bit field at offset. The 16-bit field represents the low half of a 32-bit word. |
+| IMAGE_REL_BASED_HIGHLOW | 3 | The base relocation applies all 32 bits of the difference to the 32-bit field at offset. |
+| IMAGE_REL_BASED_HIGHADJ | 4 | The base relocation adds the high 16 bits of the difference to the 16-bit field at offset. The 16-bit field represents the high value of a 32-bit word. The low 16 bits of the 32-bit value are stored in the 16-bit word that follows this base relocation. This means that this base relocation occupies two slots. |
+| IMAGE_REL_BASED_DIR64 | 10 | The base relocation applies the difference to the 64-bit field at offset. |
 
 ### References
     - [blog.kowalczyk.info/articles/pefileformat.html](https://blog.kowalczyk.info/articles/pefileformat.html)
