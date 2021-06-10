@@ -7,6 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XorEncryptedShellcodeInject
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XorEncryptedShellcodeRunner", "XorEncryptedShellcodeRunner\XorEncryptedShellcodeRunner.csproj", "{89997DC2-44F9-4026-8263-E0CBD1BAFD18}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OneShotXorEncShellcodeInjector", "OneShotXorEncShellcodeInjector\OneShotXorEncShellcodeInjector.csproj", "{DB6AB4F6-D00E-4C17-809E-CC312131FC88}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OneShotXorEncShellcodeRunner", "OneShotXorEncShellcodeRunner\OneShotXorEncShellcodeRunner.csproj", "{B219A364-2C52-4BD5-897C-A504BBB487B6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +25,14 @@ Global
 		{89997DC2-44F9-4026-8263-E0CBD1BAFD18}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{89997DC2-44F9-4026-8263-E0CBD1BAFD18}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{89997DC2-44F9-4026-8263-E0CBD1BAFD18}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DB6AB4F6-D00E-4C17-809E-CC312131FC88}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DB6AB4F6-D00E-4C17-809E-CC312131FC88}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DB6AB4F6-D00E-4C17-809E-CC312131FC88}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DB6AB4F6-D00E-4C17-809E-CC312131FC88}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B219A364-2C52-4BD5-897C-A504BBB487B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B219A364-2C52-4BD5-897C-A504BBB487B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B219A364-2C52-4BD5-897C-A504BBB487B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B219A364-2C52-4BD5-897C-A504BBB487B6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

